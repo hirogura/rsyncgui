@@ -1,0 +1,24 @@
+# 個人情報・実行時データ（リポジトリへ push しない）
+# 登録した rsync ペア（SSH ホスト/ユーザー/パスワード、送信元・送信先パス）を含む設定
+config.json
+intervals.json
+# 実行ログ（パスやコマンド等の情報を含む）
+logs/
+
+# データベース等（将来用）
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# ログ
+*.log
+
+# OS / エディタ
+.DS_Store
+*.swp

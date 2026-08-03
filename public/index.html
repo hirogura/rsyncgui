@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rsyncGUI</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSIjMGYxMTE3Ii8+CjxwYXRoIGQ9Ik0xNCAzMiBINDIgTTQyIDMyIEwzMCAyMCBNNDIgMzIgTDMwIDQ0IiBzdHJva2U9IiM1YjhhZjUiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBmaWxsPSJub25lIi8+Cjwvc3ZnPgo=">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #232733;
+  --border: #2e3345;
+  --text: #e1e4ed;
+  --text2: #8b90a0;
+  --accent: #5b8af5;
+  --accent2: #4a6fd8;
+  --green: #3ecf8e;
+  --red: #f44;
+  --orange: #f5a623;
+  --radius: 8px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 16px;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+header h1 span { color: var(--accent); }
+.header-actions { display: flex; gap: 10px; }
+
+.btn {
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover { background: var(--border); }
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-accent:hover { background: var(--accent2); }
+.btn-sm { padding: 5px 12px; font-size: 14px; }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: rgba(244,68,68,0.1); }
+.btn-icon { padding: 6px 8px; font-size: 18px; line-height: 1; }
+.btn-stop {
+  border-color: var(--red);
+  color: #fff;
+  background: var(--red);
+}
+.btn-stop:hover { background: #d83333; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+main { padding: 24px 28px; }
+
+.pairs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.pairs-header h2 { font-size: 18px; font-weight: 600; }
+
+.pair-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.pair-card:hover { border-color: #3a3f55; }
+.pair-card.active { border-color: var(--accent); }
+
+.pair-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.pair-header:hover { background: #282c3a; }
+.pair-title {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pair-num {
+  background: var(--accent);
+  color: #fff;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.pair-status {
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.pair-status.idle { background: var(--surface); color: var(--text2); }
+.pair-status.running { background: rgba(91,138,245,0.15); color: var(--accent); }
+.pair-status.done { background: rgba(62,207,142,0.15); color: var(--green); }
+.pair-status.error { background: rgba(244,68,68,0.15); color: var(--red); }
+.pair-status.cancelled { background: rgba(245,166,35,0.15); color: var(--orange); }
+
+.pair-body { padding: 18px; }
+.pair-body.collapsed { display: none; }
+
+.progress-wrap {
+  margin: 0 18px 14px 18px;
+}
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  width: 0%;
+  transition: width 0.3s ease;
+}
+.progress-bar-fill.cancelled { background: var(--orange); }
+.progress-bar-fill.error { background: var(--red); }
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.path-row {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.path-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.path-group label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text2);
+}
+.path-input {
+  display: flex;
+  gap: 0;
+}
+.path-input input {
+  flex: 1;
+  padding: 9px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) 0 0 var(--radius);
+  color: var(--text);
+  font-size: 15px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+}
+.path-input input:focus { border-color: var(--accent); }
+.path-input button {
+  padding: 9px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 16px;
+}
+.path-input button:hover { background: var(--border); color: var(--text); }
+.mkdir-btn {
+  padding: 9px 10px;
+  background: var(--green);
+  border: 1px solid var(--green);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mkdir-btn:hover { background: #2db87a; }
+
+.arrow-center {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 9px;
+  color: var(--text2);
+  font-size: 24px;
+}
+
+.mode-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.mode-group {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.mode-btn {
+  padding: 9px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  transition: all 0.15s;
+}
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.mode-btn:hover:not(.active) { background: var(--surface2); color: var(--text); }
+
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 4px;
+  margin-bottom: 18px;
+}
+.option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.option-item:hover { background: var(--surface2); }
+.option-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+.option-item label {
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.option-item .opt-name { font-weight: 600; font-family: 'SF Mono','Fira Code',monospace; color: var(--accent); min-width: 28px; }
+.option-item .opt-desc { color: var(--text2); font-size: 13px; }
+.option-item.danger-opt .opt-name { color: var(--red); }
+.option-item.danger-opt { border: 1px solid transparent; }
+.option-item.danger-opt:hover { border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.05); }
+
+.delete-warning {
+  display: none;
+  margin-bottom: 12px;
+  padding: 9px 14px;
+  background: rgba(244,68,68,0.1);
+  border: 1px solid rgba(244,68,68,0.4);
+  border-radius: var(--radius);
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 600;
+}
+.delete-warning.show { display: block; }
+
+.recursive-warning {
+  display: none;
+  margin-bottom: 12px;
+  padding: 9px 14px;
+  background: rgba(245,166,35,0.12);
+  border: 1px solid rgba(245,166,35,0.45);
+  border-radius: var(--radius);
+  color: var(--orange);
+  font-size: 14px;
+  font-weight: 600;
+}
+.recursive-warning.show { display: block; }
+
+.backup-dir-row {
+  display: none;
+  margin-bottom: 14px;
+}
+.backup-dir-row.show { display: flex; flex-direction: column; gap: 5px; }
+.backup-dir-row label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.backup-dir-row input {
+  padding: 8px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 15px;
+  font-family: 'SF Mono','Fira Code',monospace;
+  outline: none;
+}
+.backup-dir-row input:focus { border-color: var(--accent); }
+
+.ssh-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.toggle.active { background: var(--accent); }
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle.active::after { transform: translateX(18px); }
+.ssh-toggle span { font-size: 14px; font-weight: 600; }
+
+.ssh-config {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ssh-config.hidden { display: none; }
+.ssh-field { display: flex; flex-direction: column; gap: 5px; }
+.ssh-field label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.ssh-field input {
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+}
+.ssh-field input:focus { border-color: var(--accent); }
+
+.exclude-row {
+  margin-bottom: 18px;
+}
+.exclude-row label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text2);
+  display: block;
+  margin-bottom: 5px;
+}
+.exclude-row textarea {
+  width: 100%;
+  height: 56px;
+  padding: 9px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  resize: vertical;
+  outline: none;
+}
+.exclude-row textarea:focus { border-color: var(--accent); }
+
+.pair-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.pair-actions-left { display: flex; gap: 10px; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.hidden { display: none; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 620px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { font-size: 18px; font-weight: 600; }
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 24px;
+  cursor: pointer;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { flex: 1; overflow-y: auto; padding: 14px 22px; }
+.modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 0;
+  font-size: 15px;
+  flex-wrap: wrap;
+}
+.breadcrumb-item {
+  color: var(--accent);
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.breadcrumb-item:hover { background: rgba(91,138,245,0.1); }
+.breadcrumb-sep { color: var(--text2); }
+
+.folder-list { list-style: none; }
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: background 0.1s;
+}
+.folder-item:hover { background: var(--surface2); }
+.folder-item .icon { font-size: 18px; }
+.folder-item .name { flex: 1; }
+.folder-item .path { color: var(--text2); font-size: 13px; font-family: monospace; }
+.folder-item.selected { background: rgba(91,138,245,0.15); border: 1px solid var(--accent); }
+
+.log-panel {
+  margin-top: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.log-header h3 { font-size: 15px; font-weight: 600; }
+.log-body {
+  padding: 14px 18px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text2);
+}
+.log-body .stdout { color: var(--text); }
+.log-body .stderr { color: var(--orange); }
+.log-body .error { color: var(--red); }
+
+.notification {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  padding: 14px 22px;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  z-index: 2000;
+  animation: slideIn 0.3s ease;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.notification.success { background: rgba(62,207,142,0.15); color: var(--green); border: 1px solid var(--green); }
+.notification.error { background: rgba(244,68,68,0.15); color: var(--red); border: 1px solid var(--red); }
+
+.empty-state {
+  text-align: center;
+  padding: 44px;
+  color: var(--text2);
+}
+.empty-state .icon { font-size: 52px; margin-bottom: 14px; }
+.empty-state p { font-size: 16px; }
+
+.schedule-section {
+  margin-bottom: 18px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.schedule-section.hidden { display: none; }
+.schedule-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.schedule-row:last-child { margin-bottom: 0; }
+.schedule-row label {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 80px;
+}
+.schedule-row input[type="time"],
+.schedule-row input[type="number"],
+.schedule-row select {
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.schedule-row input[type="time"]:focus,
+.schedule-row input[type="number"]:focus,
+.schedule-row select:focus { border-color: var(--accent); }
+.schedule-row .days {
+  display: flex;
+  gap: 5px;
+}
+.schedule-row .day-btn {
+  width: 36px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.schedule-row .day-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.schedule-row .day-btn:hover { border-color: var(--accent); }
+.schedule-desc {
+  font-size: 13px;
+  color: var(--text2);
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: 6px;
+}
+.schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.schedule-select {
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.schedule-select:focus { border-color: var(--accent); }
+.schedule-badge {
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: rgba(62,207,142,0.15);
+  color: var(--green);
+}
+.schedule-badge.off {
+  background: var(--surface);
+  color: var(--text2);
+}
+.interval-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.interval-group input[type="number"] {
+  width: 80px;
+}
+.error-badge {
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  cursor: pointer;
+  animation: pulse 2s infinite;
+  margin-left: 6px;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.pair-log-section {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.pair-log-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text2);
+  padding: 4px 0;
+}
+.pair-log-toggle:hover { color: var(--text); }
+.pair-log-body {
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.pair-log-body .log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+.pair-log-body .log-ts { color: var(--text2); white-space: nowrap; }
+.pair-log-body .log-ok { color: var(--green); }
+.pair-log-body .log-err { color: var(--red); }
+.pair-log-detail {
+  display: none;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: var(--surface2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+.pair-log-detail.show { display: block; }
+.pair-log-detail pre {
+  background: var(--bg);
+  padding: 8px;
+  border-radius: 4px;
+  margin: 4px 0;
+  color: var(--text);
+}
+.time-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>⚡</span> rsyncGUI</h1>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="addPair()">＋ ペア追加</button>
+    <button class="btn btn-sm" onclick="exportConfig()">📥 エクスポート</button>
+    <button class="btn btn-sm" onclick="document.getElementById('importFile').click()">📤 インポート</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importConfig(event)">
+    <button class="btn btn-sm" onclick="restartGui()" style="border-color:var(--text2);color:var(--text2)">🔄 rsyncGUI再起動</button>
+    <button class="btn btn-sm" onclick="saveSchedule()" style="border-color:var(--green);color:var(--green)">⏰ スケジュール登録</button>
+    <button class="btn btn-sm" onclick="showScheduleCheck()" style="border-color:var(--orange);color:var(--orange)">📋 スケジュール確認</button>
+    <button class="btn btn-sm" onclick="cancelAll()" style="border-color:var(--red);color:var(--red)">⏹ 全停止</button>
+    <button class="btn btn-sm btn-accent" onclick="runAll()">▶ 全実行</button>
+  </div>
+</header>
+
+<main>
+  <div id="pairs"></div>
+  <div id="allLogs"></div>
+  <div id="logPanel" class="log-panel" style="display:none">
+    <div class="log-header">
+      <h3>📋 実行ログ</h3>
+      <button class="btn btn-sm" onclick="clearLog()">クリア</button>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+</main>
+
+<div class="modal-overlay hidden" id="folderModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📁 フォルダを選択</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <ul class="folder-list" id="folderList"></ul>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-accent" id="selectBtn" onclick="selectFolder()">選択</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="scheduleModal">
+  <div class="modal" style="width:700px">
+    <div class="modal-header">
+      <h3>📋 スケジュール確認</h3>
+      <button class="modal-close" onclick="closeScheduleModal()">×</button>
+    </div>
+    <div class="modal-body" id="scheduleModalBody">
+      <div style="text-align:center;color:var(--text2);padding:20px">読み込み中...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeScheduleModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const RSYNC_OPTIONS = [
+  { key: 'archive',          short: 'a',    desc: 'アーカイブモード（権限・タイムスタンプ保持）' },
+  { key: 'verbose',          short: 'v',    desc: '詳細出力' },
+  { key: 'compress',         short: 'z',    desc: '転送時圧縮' },
+  { key: 'recursive',        short: 'r',    desc: 'サブディレクトリ再帰' },
+  { key: 'times',            short: 't',    desc: 'タイムスタンプ維持' },
+  { key: 'perms',            short: 'p',    desc: 'パーミッション維持' },
+  { key: 'owner',            short: 'o',    desc: 'オーナー情報維持' },
+  { key: 'group',            short: 'g',    desc: 'グループ情報維持' },
+  { key: 'links',            short: 'l',    desc: 'シンボリックリンクを複製' },
+  { key: 'hard-links',       short: 'H',    desc: 'ハードリンクを複製' },
+  { key: 'partial',          short: null,   desc: '中断ファイルを保持（転送再開用）' },
+  { key: 'progress',         short: null,   desc: '進捗表示' },
+  { key: 'human-readable',   short: 'h',    desc: '人間が読めるサイズ表示（rsync 3.x以降）' },
+  { key: 'checksum',         short: 'c',    desc: 'チェックサムで比較（タイムスタンプ無視）' },
+  { key: 'itemize-changes',  short: 'i',    desc: '変更ファイルの詳細表示' },
+  { key: 'stats',            short: null,   desc: '転送統計情報を表示' },
+  { key: 'ignore-existing',  short: null,   desc: '転送先に既存ファイルがあればスキップ' },
+  { key: 'update',           short: 'u',    desc: '転送元より新しいファイルのみ転送' },
+  { key: 'delete',           short: null,   desc: 'ターゲット側の不要ファイルを削除', danger: true },
+  { key: 'backup',           short: 'b',    desc: '上書き前にバックアップを作成' },
+];
+
+let pairs = [];
+let nextId = 1;
+let currentPairId = null;
+let currentInputId = null;
+let currentPath = '/';
+let selectedFolder = null;
+let pollingTimers = {};
+let dismissedErrors = new Set(JSON.parse(localStorage.getItem('rsyncgui_dismissed') || '[]'));
+let pairLogsExpanded = {};
+let pairLogsData = {};
+
+const DAY_NAMES = ['日','月','火','水','木','金','土'];
+
+const SYNC_DEFAULTS  = { archive: true, verbose: true, progress: true };
+const COPY_DEFAULTS  = { recursive: true, verbose: true, times: true, update: true, progress: true };
+
+function createDefaultPair() {
+  return {
+    id: nextId++,
+    source: '',
+    target: '',
+    mode: 'copy',
+    sshEnabled: false,
+    ssh: { host: '', port: '22', user: '', password: '', key: '' },
+    options: { ...COPY_DEFAULTS },
+    'backup-dir': '',
+    exclude: '',
+    dryRun: false,
+    status: 'idle',
+    collapsed: false,
+    schedule: { enabled: false, mode: 'time', times: ['02:00'], days: [1,2,3,4,5,6,0], interval: 60, intervalUnit: 's' },
+  };
+}
+
+function ensurePair(p) {
+  if (!p.ssh) p.ssh = { host: '', port: '22', user: '', password: '', key: '' };
+  if (!p.options) p.options = { ...COPY_DEFAULTS };
+  if (!p.schedule) p.schedule = { enabled: false, mode: 'time', times: ['02:00'], days: [1,2,3,4,5,6,0], interval: 60, intervalUnit: 's' };
+  if (!p.schedule.mode) p.schedule.mode = 'time';
+  if (p.schedule.interval === undefined) p.schedule.interval = 60;
+  if (!p.schedule.intervalUnit) p.schedule.intervalUnit = 's';
+  if (p.schedule.time && !p.schedule.times) {
+    p.schedule.times = [p.schedule.time];
+    delete p.schedule.time;
+  }
+  if (!p.schedule.times || !Array.isArray(p.schedule.times)) p.schedule.times = ['02:00'];
+  if (p.collapsed === undefined) p.collapsed = false;
+  if (p['backup-dir'] === undefined) p['backup-dir'] = '';
+  if (!p.progress) p.progress = { percent: 0, transferred: 0, rate: '', eta: '' };
+  if (p.jobId === undefined) p.jobId = null;
+  if (!p.schedule.times) p.schedule.times = [p.schedule.time || '02:00'];
+  return p;
+}
+
+async function mkdirTarget(pairId) {
+  const p = pairs.find(x => x.id === pairId);
+  if (!p || !p.target) {
+    notify('ターゲットパスを入力してください', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: p.target,
+        ssh: p.sshEnabled ? p.ssh : null,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const target = p.sshEnabled ? `${p.ssh.user || 'root'}@${p.ssh.host}:${p.target}` : p.target;
+      notify('フォルダを作成しました: ' + target, 'success');
+    } else {
+      notify('フォルダ作成エラー: ' + (data.error || '不明'), 'error');
+    }
+  } catch (e) {
+    notify('通信エラー: ' + e.message, 'error');
+  }
+}
+
+async function loadPairLogs(pairId) {
+  try {
+    const res = await fetch('/api/logs?pairId=' + pairId);
+    const data = await res.json();
+    pairLogsData[pairId] = data.logs || [];
+  } catch (e) {
+    pairLogsData[pairId] = [];
+  }
+}
+
+function togglePairLogs(pairId) {
+  pairLogsExpanded[pairId] = !pairLogsExpanded[pairId];
+  if (pairLogsExpanded[pairId] && !pairLogsData[pairId]) {
+    loadPairLogs(pairId).then(() => render());
+  } else {
+    render();
+  }
+}
+
+function renderPairLog(id) {
+  const logs = pairLogsData[id] || [];
+  const isOpen = pairLogsExpanded[id];
+  if (!logs.length && !isOpen) return '';
+  const count = logs.length;
+  const hasError = logs.some(l => l.exitCode !== 0);
+  let body = '';
+  if (isOpen) {
+    if (logs.length) {
+      body = '<div class="pair-log-body">' + logs.slice().reverse().map((l, i) => {
+        const ts = l.time || '';
+        const ok = l.exitCode === 0;
+        const cls = ok ? 'log-ok' : 'log-err';
+        const statusLabel = ok ? '✓ 成功' : '✗ 失敗';
+        const exitInfo = ok ? '' : ` (code=${l.exitCode})`;
+        return `<div class="log-entry" style="cursor:pointer" onclick="document.getElementById('log-detail-${id}-${i}').classList.toggle('show')">
+          <span class="log-ts">${ts}</span>
+          <span class="${cls}">${statusLabel}${exitInfo}</span>
+        </div>
+        <div class="pair-log-detail" id="log-detail-${id}-${i}">
+          <div style="margin-bottom:4px"><b>コマンド:</b> <code style="font-size:11px">${escHtml(l.command || '')}</code></div>
+          <div style="margin-bottom:4px"><b>時刻:</b> ${ts}</div>
+          <div><b>ログ:</b></div>
+          <pre style="margin:4px 0;white-space:pre-wrap;font-size:11px;max-height:200px;overflow-y:auto">${escHtml(l.log || '')}</pre>
+        </div>`;
+      }).join('') + '</div>';
+    } else {
+      body = '<div class="pair-log-body" style="color:var(--text2)">ログなし</div>';
+    }
+  }
+  const headerIcon = hasError ? '⚠' : '📋';
+  return `<div class="pair-log-section">
+    <div class="pair-log-toggle" onclick="togglePairLogs(${id})">
+      <span>${isOpen ? '▼' : '▶'}</span>
+      <span>${headerIcon} ペア#${id} 実行ログ (${count}件)</span>
+      ${hasError && !isOpen ? '<span style="color:var(--red);font-size:12px;margin-left:6px">⚠ エラーあり</span>' : ''}
+    </div>
+    ${body}
+  </div>`;
+}
+
+function addPair() {
+  pairs.push(createDefaultPair());
+  render();
+}
+
+function removePair(id) {
+  pairs = pairs.filter(p => p.id !== id);
+  render();
+}
+
+function toggleCollapse(id) {
+  const p = pairs.find(x => x.id === id);
+  if (p) p.collapsed = !p.collapsed;
+  saveCollapseState();
+  render();
+}
+
+function saveCollapseState() {
+  const state = {};
+  for (const p of pairs) {
+    state[p.id] = p.collapsed;
+  }
+  localStorage.setItem('rsyncgui_collapsed', JSON.stringify(state));
+}
+
+function loadCollapseState() {
+  try {
+    const state = JSON.parse(localStorage.getItem('rsyncgui_collapsed') || '{}');
+    for (const p of pairs) {
+      if (state[p.id] !== undefined) p.collapsed = state[p.id];
+    }
+  } catch (e) {}
+}
+
+function setMode(id, mode) {
+  const p = pairs.find(x => x.id === id);
+  if (!p) return;
+  p.mode = mode;
+  if (mode === 'sync') {
+    Object.assign(p.options, SYNC_DEFAULTS);
+    p.options.recursive = false;
+  } else {
+    Object.assign(p.options, COPY_DEFAULTS);
+    p.options.archive = false;
+  }
+  render();
+}
+
+function toggleOption(id, key) {
+  const p = pairs.find(x => x.id === id);
+  if (!p) return;
+  p.options[key] = !p.options[key];
+  if (key === 'delete' || key === 'backup') render();
+}
+
+function toggleSSH(id) {
+  const p = pairs.find(x => x.id === id);
+  if (p) { p.sshEnabled = !p.sshEnabled; render(); }
+}
+
+function toggleSchedule(id) {
+  const p = pairs.find(x => x.id === id);
+  if (p) {
+    p.schedule.enabled = !p.schedule.enabled;
+    render();
+  }
+}
+
+function setScheduleMode(id, mode) {
+  const p = pairs.find(x => x.id === id);
+  if (p) { p.schedule.mode = mode; render(); }
+}
+
+function setScheduleTime(id, index, value) {
+  const p = pairs.find(x => x.id === id);
+  if (p) {
+    if (!p.schedule.times) p.schedule.times = [p.schedule.time || '02:00'];
+    p.schedule.times[index] = value;
+    render();
+  }
+}
+
+function addScheduleTime(id) {
+  const p = pairs.find(x => x.id === id);
+  if (p) {
+    if (!p.schedule.times) p.schedule.times = [p.schedule.time || '02:00'];
+    p.schedule.times.push('12:00');
+    render();
+  }
+}
+
+function removeScheduleTime(id, index) {
+  const p = pairs.find(x => x.id === id);
+  if (p && p.schedule.times && p.schedule.times.length > 1) {
+    p.schedule.times.splice(index, 1);
+    render();
+  }
+}
+
+function setScheduleInterval(id, value) {
+  const p = pairs.find(x => x.id === id);
+  if (p) { p.schedule.interval = parseInt(value) || 1; render(); }
+}
+
+function setScheduleIntervalUnit(id, unit) {
+  const p = pairs.find(x => x.id === id);
+  if (p) { p.schedule.intervalUnit = unit; render(); }
+}
+
+function toggleScheduleDay(id, day) {
+  const p = pairs.find(x => x.id === id);
+  if (!p) return;
+  const s = p.schedule;
+  const idx = s.days.indexOf(day);
+  if (idx >= 0) s.days.splice(idx, 1);
+  else s.days.push(day);
+  s.days.sort();
+  render();
+}
+
+function formatInterval(interval, unit) {
+  const unitLabels = { 's': '秒', 'm': '分', 'h': '時間' };
+  return interval + unitLabels[unit] + 'ごと';
+}
+
+function getScheduleDesc(p) {
+  if (!p.schedule.enabled) return 'スケジュール: OFF';
+  const s = p.schedule;
+  if (s.mode === 'time') {
+    if (!s.days.length) return '未設定';
+    const dayStr = s.days.map(d => DAY_NAMES[d]).join('・');
+    const times = s.times || [s.time || '02:00'];
+    const timeStr = times.join(' / ');
+    return dayStr + ' ' + timeStr;
+  } else {
+    return formatInterval(s.interval, s.intervalUnit);
+  }
+}
+
+function updateField(id, field, value) {
+  const p = pairs.find(x => x.id === id);
+  if (!p) return;
+  if (field.startsWith('ssh.')) {
+    p.ssh[field.slice(4)] = value;
+  } else {
+    p[field] = value;
+  }
+}
+
+function openFolderChooser(pairId, inputType) {
+  currentPairId = pairId;
+  currentInputId = inputType;
+  const p = pairs.find(x => x.id === pairId);
+  currentPath = (inputType === 'source' ? p.source : p.target) || '/';
+  if (!currentPath.endsWith('/')) currentPath += '/';
+  selectedFolder = null;
+  document.getElementById('folderModal').classList.remove('hidden');
+  browseTo(currentPath);
+}
+
+function closeModal() {
+  document.getElementById('folderModal').classList.add('hidden');
+}
+
+function selectFolder() {
+  if (!selectedFolder) return;
+  const p = pairs.find(x => x.id === currentPairId);
+  if (!p) return;
+  if (currentInputId === 'source') p.source = selectedFolder;
+  else p.target = selectedFolder;
+  closeModal();
+  render();
+}
+
+async function browseTo(dirPath) {
+  currentPath = dirPath;
+  const res = await fetch('/api/browse?path=' + encodeURIComponent(dirPath));
+  const data = await res.json();
+  if (data.error) return;
+
+  const bc = document.getElementById('breadcrumb');
+  const parts = data.current.split('/').filter(Boolean);
+  let html = '<span class="breadcrumb-item" onclick="browseTo(\'/\')">/</span>';
+  let accumulated = '';
+  for (const part of parts) {
+    accumulated += '/' + part;
+    const p = accumulated;
+    html += '<span class="breadcrumb-sep">/</span>';
+    html += '<span class="breadcrumb-item" onclick="browseTo(\'' + p.replace(/'/g, "\\'") + '\')">' + part + '</span>';
+  }
+  bc.innerHTML = html;
+
+  const list = document.getElementById('folderList');
+  let items = '';
+  if (data.parent && data.parent !== data.current) {
+    items += '<li class="folder-item" onclick="browseTo(\'' + data.parent.replace(/'/g, "\\'") + '\')">';
+    items += '<span class="icon">⬆</span><span class="name">..</span></li>';
+  }
+  for (const item of data.items) {
+    const sel = selectedFolder === item.path ? ' selected' : '';
+    items += '<li class="folder-item' + sel + '" onclick="selectItem(this, \'' + item.path.replace(/'/g, "\\'") + '\')">';
+    items += '<span class="icon">📁</span><span class="name">' + item.name + '</span>';
+    items += '<span class="path">' + item.path + '</span></li>';
+  }
+  if (!data.items.length && !data.parent) {
+    items = '<li class="folder-item"><span class="name">（フォルダなし）</span></li>';
+  }
+  list.innerHTML = items;
+}
+
+function selectItem(el, path) {
+  selectedFolder = path;
+  document.querySelectorAll('.folder-item').forEach(x => x.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function formatBytes(n) {
+  if (!n || n <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+async function runPair(id) {
+  const p = pairs.find(x => x.id === id);
+  if (!p || !p.source || !p.target) {
+    notify('ソースとターゲットを指定してください', 'error');
+    return;
+  }
+  clearDismissedOnRun(id);
+  p.status = 'running';
+  p.progress = { percent: 0, transferred: 0, rate: '', eta: '' };
+  render();
+  try {
+    const opts = { ...p.options };
+    const body = {
+      source: p.source,
+      target: p.target,
+      mode: p.mode,
+      options: opts,
+      'backup-dir': p['backup-dir'] || '',
+      ssh: p.sshEnabled ? p.ssh : null,
+      dryRun: p.dryRun,
+      exclude: p.exclude,
+      pairId: String(p.id),
+    };
+    const res = await fetch('/api/rsync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    p.jobId = data.id;
+    render();
+    showLog('▶ ' + data.command);
+    pollStatus(id, data.id);
+  } catch (e) {
+    p.status = 'error';
+    render();
+    notify('エラー: ' + e.message, 'error');
+  }
+}
+
+async function cancelPair(id) {
+  const p = pairs.find(x => x.id === id);
+  if (!p || !p.jobId) return;
+  if (!confirm('実行中の処理を中断しますか？')) return;
+  try {
+    await fetch('/api/cancel/' + p.jobId, { method: 'POST' });
+    showLog('■ 中断リクエストを送信しました');
+  } catch (e) {
+    notify('中断リクエストに失敗しました: ' + e.message, 'error');
+  }
+}
+
+function pollStatus(pairId, jobId) {
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/status/' + jobId);
+      const data = await res.json();
+      for (const line of data.log) {
+        showLog(line.text, line.type);
+      }
+      data.log.length = 0;
+
+      const p = pairs.find(x => x.id === pairId);
+      if (p && data.progress) {
+        p.progress = data.progress;
+        updateProgressUI(pairId, p.progress, p.status);
+      }
+
+      if (data.done) {
+        clearInterval(timer);
+        delete pollingTimers[pairId];
+        if (p) {
+          p.jobId = null;
+          if (data.cancelled) {
+            p.status = 'cancelled';
+          } else {
+            p.status = data.exitCode === 0 ? 'done' : 'error';
+          }
+          if (p.status === 'done') {
+            p.progress = { percent: 100, transferred: p.progress.transferred, rate: '', eta: '' };
+          }
+          loadPairLogs(pairId);
+        }
+        render();
+        if (data.cancelled) {
+          notify('中断しました', 'error');
+        } else {
+          notify(data.exitCode === 0 ? '完了' : 'エラー終了', data.exitCode === 0 ? 'success' : 'error');
+        }
+      }
+    } catch (e) {
+      clearInterval(timer);
+      delete pollingTimers[pairId];
+      const p = pairs.find(x => x.id === pairId);
+      if (p && p.status === 'running') {
+        p.status = 'error';
+        p.jobId = null;
+        render();
+        notify('ポーリングに失敗しました（サーバー接続を確認してください）', 'error');
+      }
+    }
+  }, 500);
+  pollingTimers[pairId] = timer;
+}
+
+function updateProgressUI(pairId, progress, status) {
+  const fill = document.getElementById('progress-fill-' + pairId);
+  const pct = document.getElementById('progress-pct-' + pairId);
+  const meta = document.getElementById('progress-meta-' + pairId);
+  if (!fill) return;
+  const percent = Math.max(0, Math.min(100, progress.percent || 0));
+  fill.style.width = percent + '%';
+  fill.classList.remove('cancelled', 'error');
+  if (status === 'cancelled') fill.classList.add('cancelled');
+  if (status === 'error') fill.classList.add('error');
+  if (pct) pct.textContent = percent + '%';
+  if (meta) {
+    const parts = [];
+    if (progress.transferred) parts.push(formatBytes(progress.transferred) + ' 転送済み');
+    if (progress.rate) parts.push(progress.rate);
+    if (progress.eta) parts.push('ETA ' + progress.eta);
+    meta.textContent = parts.join(' / ');
+  }
+}
+
+function runAll() {
+  for (const p of pairs) {
+    if (p.source && p.target) runPair(p.id);
+  }
+}
+
+function showLog(text, type) {
+  const panel = document.getElementById('logPanel');
+  const body = document.getElementById('logBody');
+  panel.style.display = 'block';
+  const span = document.createElement('span');
+  span.className = type || '';
+  span.textContent = text;
+  body.appendChild(span);
+  body.appendChild(document.createElement('br'));
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logBody').innerHTML = '';
+  document.getElementById('logPanel').style.display = 'none';
+}
+
+function notify(msg, type) {
+  const el = document.createElement('div');
+  el.className = 'notification ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function render() {
+  const container = document.getElementById('pairs');
+  if (!pairs.length) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📂</div><p>ペアを追加してrsyncを開始しましょう</p></div>';
+    document.getElementById('allLogs').innerHTML = '';
+    return;
+  }
+  let html = '';
+  for (const p of pairs) {
+    html += renderPair(p);
+  }
+  container.innerHTML = html;
+  renderAllLogs();
+}
+
+function renderAllLogs() {
+  const container = document.getElementById('allLogs');
+  let allLogs = [];
+  for (const p of pairs) {
+    const logs = pairLogsData[p.id] || [];
+    for (const l of logs) {
+      allLogs.push({ ...l, pairId: p.id, pairSource: p.source, pairTarget: p.target });
+    }
+  }
+  allLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  if (!allLogs.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div style="margin-top:24px">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+  html += '<h2 style="font-size:18px;font-weight:600">📋 実行ログ</h2>';
+  html += '</div>';
+
+  for (const l of allLogs) {
+    const ok = l.exitCode === 0;
+    const cls = ok ? 'log-ok' : 'log-err';
+    const statusLabel = ok ? '✓ 成功' : '✗ 失敗';
+    const exitInfo = ok ? '' : ` (code=${l.exitCode})`;
+    const pairLabel = `ペア#${l.pairId}`;
+    const logId = `global-log-${l.pairId}-${l.timestamp}`;
+
+    html += `<div class="pair-log-section" style="margin-bottom:8px">`;
+    html += `<div class="pair-log-toggle" onclick="document.getElementById('${logId}').classList.toggle('show')" style="cursor:pointer">`;
+    html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
+    html += `<span style="background:var(--accent);color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${l.pairId}</span>`;
+    html += `<span class="${cls}" style="font-weight:600">${statusLabel}${exitInfo}</span>`;
+    html += `<span style="color:var(--text2);font-size:13px">${l.time || ''}</span>`;
+    html += `<span style="color:var(--text2);font-size:12px">${escHtml((l.pairSource || '').split('/').pop() || 'ソース')} → ${escHtml((l.pairTarget || '').split('/').pop() || 'ターゲット')}</span>`;
+    html += `</div>`;
+    html += `</div>`;
+    html += `<div class="pair-log-detail" id="${logId}">`;
+    html += `<div style="margin-bottom:6px"><b>コマンド:</b></div>`;
+    html += `<pre style="margin:4px 0;white-space:pre-wrap;font-size:11px;max-height:150px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:4px">${escHtml(l.command || '')}</pre>`;
+    if (l.log) {
+      html += `<div style="margin-bottom:4px"><b>ログ:</b></div>`;
+      html += `<pre style="margin:4px 0;white-space:pre-wrap;font-size:11px;max-height:200px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:4px">${escHtml(l.log)}</pre>`;
+    }
+    html += `</div>`;
+    html += `</div>`;
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderPair(p) {
+  p = ensurePair(p);
+  const statusLabel = { idle: '待機中', running: '実行中', done: '完了', error: 'エラー', cancelled: '中断' }[p.status] || p.status;
+  const modeBtn = (m, label) => `<button class="mode-btn${p.mode === m ? ' active' : ''}" onclick="setMode(${p.id},'${m}')">${label}</button>`;
+
+  const optItem = (o) => {
+    const flagLabel = o.short ? `-${o.short} / --${o.key}` : `--${o.key}`;
+    const dangerClass = o.danger ? ' danger-opt' : '';
+    return `<label class="option-item${dangerClass}">` +
+      `<input type="checkbox" ${p.options[o.key] ? 'checked' : ''} onchange="toggleOption(${p.id},'${o.key}')">` +
+      `<label><span class="opt-name">${flagLabel}</span> <span class="opt-desc">${o.desc}</span></label>` +
+      `</label>`;
+  };
+
+  const showDeleteWarning = p.options['delete'] ? 'show' : '';
+  const showBackupDir    = p.options['backup']  ? 'show' : '';
+  const hasRecursion = !!(p.options['recursive'] || p.options['archive']);
+  const showRecursiveWarning = hasRecursion ? '' : 'show';
+
+  const times = p.schedule.times && p.schedule.times.length ? p.schedule.times : [p.schedule.time || '02:00'];
+  const scheduleTimeInput = p.schedule.mode === 'time'
+    ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+        ${times.map((t, i) => `<div style="display:flex;align-items:center;gap:4px">
+          <input type="time" value="${esc(t)}" onchange="setScheduleTime(${p.id},${i},this.value)">
+          ${times.length > 1 ? `<button class="btn btn-sm btn-danger" onclick="removeScheduleTime(${p.id},${i})" style="padding:4px 8px;font-size:12px">✕</button>` : ''}
+        </div>`).join('')}
+        <button class="btn btn-sm" onclick="addScheduleTime(${p.id})" style="padding:4px 10px;font-size:13px;white-space:nowrap">+ 時刻追加</button>
+       </div>`
+    : `<div class="interval-group">
+        <input type="number" min="1" value="${p.schedule.interval}" onchange="setScheduleInterval(${p.id},this.value)">
+        <select onchange="setScheduleIntervalUnit(${p.id},this.value)">
+          <option value="s"${p.schedule.intervalUnit === 's' ? ' selected' : ''}>秒</option>
+          <option value="m"${p.schedule.intervalUnit === 'm' ? ' selected' : ''}>分</option>
+          <option value="h"${p.schedule.intervalUnit === 'h' ? ' selected' : ''}>時間</option>
+        </select>
+       </div>`;
+
+  const scheduleTimeLabel = p.schedule.mode === 'time' ? '時刻' : '間隔';
+
+  const daysHtml = p.schedule.mode === 'time'
+    ? `<div class="schedule-row">
+        <label>曜日</label>
+        <div class="days">
+          ${DAY_NAMES.map((d,i) => '<div class="day-btn' + (p.schedule.days.includes(i) ? ' active' : '') + '" onclick="toggleScheduleDay(' + p.id + ',' + i + ')">' + d + '</div>').join('')}
+        </div>
+       </div>`
+    : '';
+
+  const showProgress = p.status !== 'idle';
+  const progressPercent = Math.max(0, Math.min(100, p.progress ? p.progress.percent : 0));
+  const progressFillClass = p.status === 'cancelled' ? ' cancelled' : (p.status === 'error' ? ' error' : '');
+  const progressMetaParts = [];
+  if (p.progress && p.progress.transferred) progressMetaParts.push(formatBytes(p.progress.transferred) + ' 転送済み');
+  if (p.progress && p.progress.rate) progressMetaParts.push(p.progress.rate);
+  if (p.progress && p.progress.eta) progressMetaParts.push('ETA ' + p.progress.eta);
+
+  const runStopButtons = p.status === 'running'
+    ? `<button class="btn btn-stop" onclick="cancelPair(${p.id})">■ 中断</button>`
+    : `<button class="btn btn-accent" onclick="runPairForce(${p.id})">▶ 実行</button>
+       <button class="btn" onclick="runPairDry(${p.id})">🔍 ドライラン</button>`;
+
+  const hasError = p.status === 'error' && !dismissedErrors.has(String(p.id));
+  return `
+  <div class="pair-card ${p.status === 'running' ? 'active' : ''}">
+    <div class="pair-header" onclick="toggleCollapse(${p.id})">
+      <div class="pair-title">
+        <span class="pair-num">${p.id}</span>
+        ${p.source ? '<span style="color:var(--text2);font-size:14px">' + shorten(p.source) + '</span>' : '<span style="color:var(--text2);font-size:14px">未設定</span>'}
+        <span style="color:var(--text2)">→</span>
+        ${p.target ? '<span style="color:var(--text2);font-size:14px">' + shorten(p.target) + '</span>' : '<span style="color:var(--text2);font-size:14px">未設定</span>'}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${p.schedule.enabled ? '<span class="schedule-badge">' + getScheduleDesc(p) + '</span>' : ''}
+        ${hasError ? '<span class="error-badge" onclick="event.stopPropagation();dismissError(' + p.id + ')">⚠ エラーあり</span>' : ''}
+      </div>
+    </div>
+    <div class="progress-wrap" style="${showProgress ? '' : 'display:none'}">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill${progressFillClass}" id="progress-fill-${p.id}" style="width:${progressPercent}%"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="progress-pct-${p.id}">${progressPercent}%</span>
+        <span id="progress-meta-${p.id}">${progressMetaParts.join(' / ')}</span>
+      </div>
+    </div>
+    <div class="pair-body${p.collapsed ? ' collapsed' : ''}">
+      <div class="path-row">
+        <div class="path-group">
+          <label>ソースフォルダ</label>
+          <div class="path-input">
+            <input type="text" value="${esc(p.source)}" placeholder="/path/to/source" onchange="updateField(${p.id},'source',this.value)">
+            <button onclick="openFolderChooser(${p.id},'source')">📁</button>
+          </div>
+        </div>
+        <div class="arrow-center">→</div>
+        <div class="path-group">
+          <label>ターゲットフォルダ</label>
+          <div class="path-input">
+            <input type="text" value="${esc(p.target)}" placeholder="/path/to/target" onchange="updateField(${p.id},'target',this.value)">
+            <button onclick="openFolderChooser(${p.id},'target')">📁</button>
+            <button class="mkdir-btn" onclick="mkdirTarget(${p.id})" title="フォルダを作成">＋作成</button>
+          </div>
+        </div>
+      </div>
+      <div class="mode-row">
+        <div class="mode-group">
+          ${modeBtn('copy', '📋 Copy')}
+          ${modeBtn('sync', '🔄 Sync')}
+        </div>
+        <div class="ssh-toggle">
+          <div class="toggle${p.sshEnabled ? ' active' : ''}" onclick="toggleSSH(${p.id})"></div>
+          <span>SSH リモート接続</span>
+        </div>
+      </div>
+      <div class="ssh-config${p.sshEnabled ? '' : ' hidden'}">
+        <div class="ssh-field">
+          <label>ホスト名 / IP</label>
+          <input type="text" value="${esc(p.ssh.host)}" placeholder="192.168.1.100" onchange="updateField(${p.id},'ssh.host',this.value)">
+        </div>
+        <div class="ssh-field">
+          <label>ポート</label>
+          <input type="text" value="${esc(p.ssh.port)}" placeholder="22" onchange="updateField(${p.id},'ssh.port',this.value)">
+        </div>
+        <div class="ssh-field">
+          <label>ユーザー名</label>
+          <input type="text" value="${esc(p.ssh.user)}" placeholder="root" onchange="updateField(${p.id},'ssh.user',this.value)">
+        </div>
+        <div class="ssh-field">
+          <label>パスワード</label>
+          <input type="password" value="${esc(p.ssh.password)}" placeholder="（パスワード認証の場合）" onchange="updateField(${p.id},'ssh.password',this.value)">
+        </div>
+        <div class="ssh-field">
+          <label>SSH秘密鍵パス</label>
+          <input type="text" value="${esc(p.ssh.key)}" placeholder="~/.ssh/id_rsa" onchange="updateField(${p.id},'ssh.key',this.value)">
+        </div>
+      </div>
+      <div class="options-grid">
+        ${RSYNC_OPTIONS.map(o => optItem(o)).join('')}
+      </div>
+
+      <div class="recursive-warning ${showRecursiveWarning}">
+        ⚠️ 再帰オプション（-r または -a）が有効になっていません。このままではサブディレクトリの中身が転送されません。
+      </div>
+
+      <div class="delete-warning ${showDeleteWarning}">
+        ⚠️ --delete が有効です。ターゲット側にあってソース側にないファイルが削除されます。
+      </div>
+
+      <div class="backup-dir-row ${showBackupDir}">
+        <label>バックアップ先ディレクトリ（--backup-dir）</label>
+        <input type="text" value="${esc(p['backup-dir'])}" placeholder="/path/to/backup （空白時はターゲットと同じ場所に ~suffix）"
+          onchange="updateField(${p.id},'backup-dir',this.value)">
+      </div>
+
+      <div class="exclude-row">
+        <label>除外パターン（1行1パターン）</label>
+        <textarea placeholder="*.log&#10;.git/&#10;node_modules/" onchange="updateField(${p.id},'exclude',this.value)">${esc(p.exclude)}</textarea>
+      </div>
+      <div class="schedule-section">
+        <div class="schedule-toggle">
+          <div class="toggle${p.schedule.enabled ? ' active' : ''}" onclick="toggleSchedule(${p.id})"></div>
+          <span style="font-size:14px;font-weight:600">スケジュール実行</span>
+          ${p.schedule.enabled ? '<span class="schedule-badge">' + getScheduleDesc(p) + '</span>' : '<span class="schedule-badge off">OFF</span>'}
+        </div>
+        <div class="${p.schedule.enabled ? '' : 'hidden'}" style="margin-top:14px">
+          <div class="schedule-row">
+            <label>モード</label>
+            <select class="schedule-select" onchange="setScheduleMode(${p.id},this.value)">
+              <option value="time"${p.schedule.mode === 'time' ? ' selected' : ''}>指定時刻</option>
+              <option value="interval"${p.schedule.mode === 'interval' ? ' selected' : ''}>指定間隔</option>
+            </select>
+          </div>
+          <div class="schedule-row">
+            <label>${scheduleTimeLabel}</label>
+            ${scheduleTimeInput}
+          </div>
+          ${daysHtml}
+          <div class="schedule-desc">${getScheduleDesc(p)}</div>
+        </div>
+      </div>
+      <div class="pair-actions">
+        <div class="pair-actions-left">
+          ${runStopButtons}
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="removePair(${p.id})" ${p.status === 'running' ? 'disabled' : ''}>🗑 削除</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function runPairDry(id) {
+  const p = pairs.find(x => x.id === id);
+  if (p) {
+    p.dryRun = true;
+    runPair(id).then(() => {
+      p.dryRun = false;
+    });
+  }
+}
+
+function runPairForce(id) {
+  const p = pairs.find(x => x.id === id);
+  if (p) { p.dryRun = false; runPair(id); }
+}
+
+function shorten(s) {
+  if (!s) return '';
+  const parts = s.split('/').filter(Boolean);
+  if (parts.length <= 2) return s;
+  return '…/' + parts.slice(-2).join('/');
+}
+
+function esc(s) {
+  return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function exportConfig() {
+  const data = {
+    pairs: pairs.map(p => {
+      const clean = { ...p };
+      delete clean.status;
+      delete clean.progress;
+      delete clean.jobId;
+      return clean;
+    }),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rsyncgui-config-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  notify('エクスポート完了', 'success');
+}
+
+function importConfig(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.pairs && Array.isArray(data.pairs)) {
+        pairs = data.pairs.map(ensurePair);
+        nextId = Math.max(...pairs.map(p => p.id), 0) + 1;
+        render();
+        notify('インポート完了: ' + pairs.length + 'ペア読み込み', 'success');
+      } else {
+        notify('無効な設定ファイルです', 'error');
+      }
+    } catch (err) {
+      notify('パースエラー: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+async function saveSchedule() {
+  try {
+    const cleanPairs = pairs.map(p => {
+      const c = { ...p };
+      delete c.status;
+      delete c.progress;
+      delete c.jobId;
+      return c;
+    });
+    const res = await fetch('/api/schedule/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pairs: cleanPairs }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      notify('スケジュールを登録しました', 'success');
+    } else {
+      notify('登録エラー: ' + (data.error || '不明'), 'error');
+    }
+  } catch (e) {
+    notify('通信エラー: ' + e.message, 'error');
+  }
+}
+
+function showScheduleCheck() {
+  document.getElementById('scheduleModal').classList.remove('hidden');
+  loadScheduleCheck();
+}
+
+function closeScheduleModal() {
+  document.getElementById('scheduleModal').classList.add('hidden');
+}
+
+async function loadScheduleCheck() {
+  const body = document.getElementById('scheduleModalBody');
+  body.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px">読み込み中...</div>';
+  try {
+    const res = await fetch('/api/cron');
+    const data = await res.json();
+    const entries = data.entries || [];
+    const intervals = data.intervals || [];
+
+    const rsyncEntries = entries.filter(e => e.includes('rsync') || e.includes('rsyncgui'));
+    const otherEntries = entries.filter(e => !e.includes('rsync') && !e.includes('rsyncgui'));
+
+    let html = '';
+
+    html += '<div style="margin-bottom:20px">';
+    html += '<h4 style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px">🔄 rsync関連スケジュール (' + (rsyncEntries.length + intervals.length) + '件)</h4>';
+    if (rsyncEntries.length === 0 && intervals.length === 0) {
+      html += '<div style="color:var(--text2);font-size:14px;padding:10px">登録なし</div>';
+    } else {
+      html += '<div style="font-family:monospace;font-size:13px;line-height:1.8">';
+      for (const entry of rsyncEntries) {
+        const parts = entry.split(/\s+/);
+        const cronTime = parts.slice(0, 5).join(' ');
+        const comment = entry.match(/# rsyncgui-managed id=(\d+)/);
+        const pairId = comment ? comment[1] : '?';
+        const pair = pairs.find(p => p.id === parseInt(pairId));
+        const label = pair ? (shorten(pair.source) + ' → ' + shorten(pair.target)) : '(ペア#' + pairId + ')';
+
+        html += '<div style="padding:6px 10px;border-radius:4px;margin-bottom:4px;background:var(--surface)">';
+        html += '<span style="color:var(--accent)">' + cronTime + '</span> ';
+        html += '<span style="color:var(--text)">' + label + '</span>';
+        html += '</div>';
+      }
+      for (const iv of intervals) {
+        const pair = pairs.find(p => p.id === iv.id);
+        const label = pair ? (shorten(pair.source) + ' → ' + shorten(pair.target)) : '(ペア#' + iv.id + ')';
+
+        html += '<div style="padding:6px 10px;border-radius:4px;margin-bottom:4px;background:var(--surface)">';
+        html += '<span style="color:var(--orange)">' + iv.intervalLabel + '</span> ';
+        html += '<span style="color:var(--text)">' + label + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '<div>';
+    html += '<h4 style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px">⚙️ その他のスケジュール (' + otherEntries.length + '件)</h4>';
+    if (otherEntries.length === 0) {
+      html += '<div style="color:var(--text2);font-size:14px;padding:10px">登録なし</div>';
+    } else {
+      html += '<div style="font-family:monospace;font-size:13px;line-height:1.8">';
+      for (const entry of otherEntries) {
+        html += '<div style="padding:6px 10px;border-radius:4px;margin-bottom:4px;background:var(--surface);word-break:break-all">';
+        html += '<span style="color:var(--text)">' + escHtml(entry) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div style="color:var(--red);padding:20px">読み込みエラー: ' + e.message + '</div>';
+  }
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function dismissError(id) {
+  dismissedErrors.add(String(id));
+  localStorage.setItem('rsyncgui_dismissed', JSON.stringify([...dismissedErrors]));
+  render();
+}
+
+function clearDismissedOnRun(id) {
+  dismissedErrors.delete(String(id));
+  localStorage.setItem('rsyncgui_dismissed', JSON.stringify([...dismissedErrors]));
+}
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    if (cfg.pairs && cfg.pairs.length) {
+      pairs = cfg.pairs.map(ensurePair);
+      nextId = Math.max(...pairs.map(p => p.id), 0) + 1;
+    } else {
+      addPair();
+    }
+  } catch (e) {
+    addPair();
+  }
+  loadCollapseState();
+  for (const p of pairs) {
+    await loadPairLogs(p.id);
+  }
+  render();
+}
+
+async function restartGui() {
+  if (!confirm('rsyncGUIを再起動しますか？\n実行中のタスクはすべて中断されます。')) return;
+  try {
+    await fetch('/api/cancel-all', { method: 'POST' });
+  } catch (e) {}
+  notify('rsyncGUIを再起動中...', 'success');
+  setTimeout(async () => {
+    try {
+      await fetch('/api/restart', { method: 'POST' });
+    } catch (e) {}
+  }, 500);
+  setTimeout(() => { location.reload(); }, 3000);
+}
+
+async function cancelAll() {
+  if (!confirm('すべての実行中のタスクを中断しますか？')) return;
+  try {
+    const res = await fetch('/api/cancel-all', { method: 'POST' });
+    if (!res.ok) throw new Error('サーバー応答エラー');
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : { ok: true, stopped: 0 };
+    if (data.ok) {
+      for (const p of pairs) {
+        if (p.status === 'running') {
+          p.status = 'cancelled';
+          p.jobId = null;
+        }
+      }
+      render();
+      notify((data.stopped || 0) + '件のタスクを中断しました', 'error');
+    }
+  } catch (e) {
+    notify('全停止リクエストに失敗しました（サーバーが起動しているか確認してください）: ' + e.message, 'error');
+  }
+}
+
+loadConfig();
+</script>
+</body>
+</html>
