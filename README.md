@@ -6,6 +6,8 @@ rsync を Web ブラウザで設定・実行・スケジュール管理できる
 - 動作: 標準ポート **3326**（systemd サービス `rsyncgui` として常駐）
 - インストール先: `/opt/rsyncgui`
 
+![ロゴ画像](image-ph.png)
+
 ## 必要なもの
 
 - Linux（systemd が使える環境）
@@ -105,3 +107,7 @@ sudo rm -rf /opt/rsyncgui
 `config.json`（SSH ホスト・ユーザー・パスワードや送信元/送信先パス）、`intervals.json`、
 `logs/` などの実行時データは **リポジトリに push されません**（`.gitignore` で除外）。
 バックアップ等で共有する際は十分注意してください。
+
+## ライセンス
+
+このプロジェクトは [MIT License](LICENSE) の下で公開されています。
