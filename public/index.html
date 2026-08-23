@@ -43,6 +43,16 @@ header h1 {
   align-items: center;
   gap: 8px;
 }
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.version-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+}
 header h1 span { color: var(--accent); }
 .header-actions { display: flex; gap: 10px; }
 
@@ -761,7 +771,12 @@ main { padding: 24px 28px; }
 </head>
 <body>
 <header>
-  <h1><span>⚡</span> rsyncGUI</h1>
+  <div class="header-title-group">
+    <h1><span>⚡</span> rsyncGUI</h1>
+    <span id="app-version" class="version-label"></span>
+    <button class="btn btn-sm" onclick="adminUpdate()" title="GitHubから最新版に更新">アップデート</button>
+    <button class="btn btn-sm" onclick="adminRestart()" title="rsyncguiサービスを再起動">再起動</button>
+  </div>
   <div class="header-actions">
     <button class="btn btn-sm" onclick="addPair()">＋ ペア追加</button>
     <button class="btn btn-sm" onclick="exportConfig()">📥 エクスポート</button>
@@ -1867,7 +1882,54 @@ async function cancelAll() {
   }
 }
 
+async function loadVersion() {
+  try {
+    const res = await fetch('/api/version');
+    const v = await res.json();
+    document.getElementById('app-version').textContent = 'v.' + v.version;
+  } catch (e) {}
+}
+
+async function waitForServer(maxMs = 60000) {
+  const deadline = Date.now() + maxMs;
+  await new Promise(r => setTimeout(r, 2000));
+  while (Date.now() < deadline) {
+    try { const res = await fetch('/api/version', { cache: 'no-store' }); if (res.ok) return true; } catch (e) {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+async function adminUpdate() {
+  if (!confirm('GitHubから最新版を取得してアップデートしますか？\n完了後、サービスは自動で再起動されます。')) return;
+  const b = document.getElementById('btn-update') || event.target;
+  b.disabled = true;
+  try {
+    const res = await fetch('/api/admin/update', { method: 'POST' });
+    const d = await res.json();
+    if (!res.ok || !d.ok) { notify('アップデートに失敗しました: ' + (d.error || ''), 'error'); b.disabled = false; return; }
+    if (!d.updated) { notify('すでに最新版です', 'success'); b.disabled = false; return; }
+    b.textContent = '再起動中…';
+  } catch (e) {
+    notify('アップデートに失敗しました: ' + e.message, 'error');
+    b.disabled = false;
+    return;
+  }
+  await waitForServer(120000);
+  location.reload();
+}
+
+async function adminRestart() {
+  if (!confirm('rsyncGUIサービスを再起動しますか？\n実行中のタスクはすべて中断されます。')) return;
+  const b = document.getElementById('btn-restart') || event.target;
+  b.disabled = true;
+  try { await fetch('/api/admin/restart', { method: 'POST' }); } catch (e) {}
+  await waitForServer();
+  location.reload();
+}
+
 loadConfig();
+loadVersion();
 </script>
 </body>
 </html>

@@ -10,6 +10,16 @@ BRANCH="main"
 echo "=== rsyncGUI Installer (GitHub版) ==="
 echo "Source: ${REPO_URL}"
 
+# ── Tailscale 検出（あれば Tailscale Serve で HTTPS 化する）──
+TS_IP=""
+TS_DOMAIN=""
+if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+    TS_IP=$(tailscale status --json 2>/dev/null | python3 -c "import json,sys; print((json.load(sys.stdin).get('Self', {}).get('TailscaleIPs') or [''])[0])" 2>/dev/null || true)
+    TS_DOMAIN=$(tailscale status --json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('Self', {}).get('DNSName', '').rstrip('.'))" 2>/dev/null || true)
+fi
+TS_HTTPS=0
+if [ -n "${TS_IP}" ]; then TS_HTTPS=1; fi
+
 # Detect package manager
 if command -v apt-get &>/dev/null; then
     PKG="apt"
@@ -116,6 +126,12 @@ chmod +x "$INSTALL_DIR/cron_runner.sh"
 chmod +x "$INSTALL_DIR/server.py"
 
 echo "[3/6] Creating systemd service..."
+# Tailscale Serve が TLS 終端用に <Tailscale IP>:PORT をバインドできるよう、
+# Tailscale 接続環境ではアプリを 127.0.0.1 のみで待機させる
+HOST_ENV=""
+if [ "${TS_HTTPS}" = "1" ]; then
+    HOST_ENV="Environment=HOST=127.0.0.1"
+fi
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << SERVICEEOF
 [Unit]
 Description=rsyncGUI - Web-based rsync interface
@@ -129,6 +145,8 @@ Restart=always
 RestartSec=5
 TimeoutStopSec=5
 Environment=TZ=Asia/Tokyo
+Environment=PORT=${PORT}
+${HOST_ENV}
 
 [Install]
 WantedBy=multi-user.target
@@ -140,15 +158,37 @@ systemctl enable "${SERVICE_NAME}.service"
 systemctl restart "${SERVICE_NAME}.service"
 
 sleep 1
-if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+if ! systemctl is-active --quiet "${SERVICE_NAME}.service"; then
     echo ""
-    echo "=== Installation Complete ==="
-    echo "rsyncGUI is running at http://localhost:${PORT}"
-    echo ""
-    echo "To check status: systemctl status ${SERVICE_NAME}"
-    echo "To view logs: journalctl -u ${SERVICE_NAME} -f"
-else
-    echo ""
-    echo "=== Installation Complete ==="
+    echo "=== Installation Failed ==="
     echo "WARNING: Service failed to start. Check with: systemctl status ${SERVICE_NAME}"
+    exit 1
 fi
+
+# ── Tailscale Serve で HTTPS 公開（冪等）──
+SERVE_URL=""
+if [ "${TS_HTTPS}" = "1" ]; then
+    echo "[Tailscale] Setting up Serve (HTTPS)..."
+    tailscale serve --https=${PORT} off >/dev/null 2>&1 || true
+    if tailscale serve --bg --https=${PORT} "http://127.0.0.1:${PORT}" >/dev/null 2>&1; then
+        for i in $(seq 1 12); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://${TS_DOMAIN}:${PORT}/" 2>/dev/null || echo "000")
+            [ "${HTTP_CODE}" != "000" ] && break
+            sleep 5
+        done
+        SERVE_URL="https://${TS_DOMAIN}:${PORT}"
+    else
+        echo "  [WARN] tailscale serve setup failed (HTTP only)"
+    fi
+fi
+
+echo ""
+echo "=== Installation Complete ==="
+if [ -n "${SERVE_URL}" ]; then
+    echo "rsyncGUI is running at ${SERVE_URL}  (Tailscale Serve / HTTPS)"
+else
+    echo "rsyncGUI is running at http://localhost:${PORT}"
+fi
+echo ""
+echo "To check status: systemctl status ${SERVICE_NAME}"
+echo "To view logs: journalctl -u ${SERVICE_NAME} -f"

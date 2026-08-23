@@ -10,15 +10,22 @@ import time
 import signal
 import sys
 import tempfile
+import urllib.request
 from urllib.parse import urlparse, parse_qs
 
-PORT = 3326
-PUBLIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PORT = int(os.environ.get("PORT", 3326))
+PUBLIC = os.path.join(BASE_DIR, "public")
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 CRON_TAG = "# rsyncgui-managed"
-INTERVAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "intervals.json")
-LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+INTERVAL_FILE = os.path.join(BASE_DIR, "intervals.json")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
 LOG_RETENTION_DAYS = 30
+
+APP_VERSION = "1.0.0"
+SERVICE_NAME = os.environ.get("RSYNCGUI_SERVICE", "rsyncgui")
+GITHUB_RAW = "https://raw.githubusercontent.com/hirogura/rsyncgui/main/"
+UPDATE_FILES = ["server.py", "public/index.html"]
 
 MIME = {
     ".html": "text/html",
@@ -509,7 +516,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
         params = parse_qs(parsed.query)
 
-        if path == "/api/browse":
+        if path == "/api/version":
+            self._json_response({"version": APP_VERSION})
+        elif path == "/api/browse":
             browse_path = params.get("path", ["/"])[0]
             self._browse(browse_path)
         elif path == "/api/du":
@@ -554,6 +563,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._mkdir(body)
         elif parsed.path == "/api/restart":
             self._restart()
+        elif parsed.path == "/api/admin/restart":
+            self._admin_restart()
+        elif parsed.path == "/api/admin/update":
+            self._admin_update()
         else:
             self.send_response(404)
             self.end_headers()
@@ -845,6 +858,56 @@ class Handler(http.server.BaseHTTPRequestHandler):
             os.execv(sys.executable, [sys.executable] + sys.argv)
         threading.Thread(target=do_restart, daemon=True).start()
 
+    def _admin_restart(self):
+        self._json_response({"ok": True})
+        def do_restart():
+            time.sleep(0.8)
+            subprocess.run(["systemctl", "restart", SERVICE_NAME],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        threading.Thread(target=do_restart, daemon=True).start()
+
+    def _admin_update(self):
+        try:
+            fetched = {}
+            for rel in UPDATE_FILES:
+                req = urllib.request.Request(GITHUB_RAW + rel,
+                                             headers={"User-Agent": "rsyncgui-updater"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    fetched[rel] = resp.read().decode("utf-8")
+            if not fetched["server.py"].startswith("#!") or "</html>" not in fetched["public/index.html"]:
+                raise ValueError("ダウンロードしたファイルが不正です")
+            changed = False
+            for rel, new_text in fetched.items():
+                try:
+                    with open(os.path.join(BASE_DIR, rel), encoding="utf-8") as f:
+                        cur_text = f.read()
+                except Exception:
+                    cur_text = ""
+                if cur_text != new_text:
+                    changed = True
+                    break
+            if not changed:
+                self._json_response({"ok": True, "updated": False})
+                return
+            compile(fetched["server.py"], "server.py", "exec")
+            new_paths = {}
+            for rel, new_text in fetched.items():
+                tmp_path = os.path.join(BASE_DIR, rel + ".new")
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(new_text)
+                new_paths[rel] = tmp_path
+            for rel, tmp_path in new_paths.items():
+                os.replace(tmp_path, os.path.join(BASE_DIR, rel))
+        except Exception as e:
+            self._json_response({"ok": False, "error": str(e)}, 500)
+            return
+        self._json_response({"ok": True, "updated": True})
+        def do_restart():
+            time.sleep(1.0)
+            subprocess.run(["systemctl", "restart", SERVICE_NAME],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        threading.Thread(target=do_restart, daemon=True).start()
+
     def _status(self, job_id):
         p = processes.get(job_id)
         if not p:
@@ -881,9 +944,10 @@ def kill_orphaned_rsync():
 
 
 def main():
-    server = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    host = os.environ.get("HOST", "0.0.0.0")
+    server = http.server.ThreadingHTTPServer((host, PORT), Handler)
     server.daemon_threads = True
-    print(f"rsyncGUI running at http://localhost:{PORT}")
+    print(f"rsyncGUI running at http://{host}:{PORT}")
 
     kill_orphaned_rsync()
 
