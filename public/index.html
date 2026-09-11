@@ -893,6 +893,7 @@ function createDefaultPair() {
 }
 
 function ensurePair(p) {
+  if (typeof p.id === 'string' && /^\d+$/.test(p.id)) p.id = parseInt(p.id, 10);
   if (!p.ssh) p.ssh = { host: '', port: '22', user: '', password: '', key: '' };
   if (!p.options) p.options = { ...COPY_DEFAULTS };
   if (!p.schedule) p.schedule = { enabled: false, mode: 'time', times: ['02:00'], days: [1,2,3,4,5,6,0], interval: 60, intervalUnit: 's' };
@@ -968,7 +969,7 @@ function renderPairLog(id) {
   if (isOpen) {
     if (logs.length) {
       body = '<div class="pair-log-body">' + logs.slice().reverse().map((l, i) => {
-        const ts = l.time || '';
+        const ts = l.time || (l.timestamp ? new Date(l.timestamp * 1000).toLocaleString('ja-JP') : '');
         const ok = l.exitCode === 0;
         const cls = ok ? 'log-ok' : 'log-err';
         const statusLabel = ok ? '✓ 成功' : '✗ 失敗';
@@ -1407,7 +1408,7 @@ function renderAllLogs() {
       allLogs.push({ ...l, pairId: p.id, pairSource: p.source, pairTarget: p.target });
     }
   }
-  allLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  allLogs.sort((a, b) => ((b.timestamp || b.ts || 0)) - ((a.timestamp || a.ts || 0)));
 
   if (!allLogs.length) {
     container.innerHTML = '';
@@ -1419,13 +1420,13 @@ function renderAllLogs() {
   html += '<h2 style="font-size:18px;font-weight:600">📋 実行ログ</h2>';
   html += '</div>';
 
-  for (const l of allLogs) {
+  for (let gi = 0; gi < allLogs.length; gi++) {
+    const l = allLogs[gi];
     const ok = l.exitCode === 0;
     const cls = ok ? 'log-ok' : 'log-err';
     const statusLabel = ok ? '✓ 成功' : '✗ 失敗';
     const exitInfo = ok ? '' : ` (code=${l.exitCode})`;
-    const pairLabel = `ペア#${l.pairId}`;
-    const logId = `global-log-${l.pairId}-${l.timestamp}`;
+    const logId = `global-log-${l.pairId}-${l.timestamp || l.ts || gi}`;
 
     html += `<div class="pair-log-section" style="margin-bottom:8px">`;
     html += `<div class="pair-log-toggle" onclick="document.getElementById('${logId}').classList.toggle('show')" style="cursor:pointer">`;
@@ -1518,12 +1519,12 @@ function renderPair(p) {
     <div class="pair-header" onclick="toggleCollapse(${p.id})">
       <div class="pair-title">
         <span class="pair-num">${p.id}</span>
-        ${p.source ? '<span style="color:var(--text2);font-size:14px">' + shorten(p.source) + '</span>' : '<span style="color:var(--text2);font-size:14px">未設定</span>'}
+        ${p.source ? '<span style="color:var(--text2);font-size:14px">' + escHtml(shorten(p.source)) + '</span>' : '<span style="color:var(--text2);font-size:14px">未設定</span>'}
         <span style="color:var(--text2)">→</span>
-        ${p.target ? '<span style="color:var(--text2);font-size:14px">' + shorten(p.target) + '</span>' : '<span style="color:var(--text2);font-size:14px">未設定</span>'}
+        ${p.target ? '<span style="color:var(--text2);font-size:14px">' + escHtml(shorten(p.target)) + '</span>' : '<span style="color:var(--text2);font-size:14px">未設定</span>'}
       </div>
       <div style="display:flex;align-items:center;gap:10px">
-        ${p.schedule.enabled ? '<span class="schedule-badge">' + getScheduleDesc(p) + '</span>' : ''}
+        ${p.schedule.enabled ? '<span class="schedule-badge">' + escHtml(getScheduleDesc(p)) + '</span>' : ''}
         ${hasError ? '<span class="error-badge" onclick="event.stopPropagation();dismissError(' + p.id + ')">⚠ エラーあり</span>' : ''}
       </div>
     </div>
@@ -1628,7 +1629,7 @@ function renderPair(p) {
             ${scheduleTimeInput}
           </div>
           ${daysHtml}
-          <div class="schedule-desc">${getScheduleDesc(p)}</div>
+          <div class="schedule-desc">${escHtml(getScheduleDesc(p))}</div>
         </div>
       </div>
       <div class="pair-actions">
@@ -1664,7 +1665,7 @@ function shorten(s) {
 }
 
 function esc(s) {
-  return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function exportConfig() {
@@ -1696,7 +1697,8 @@ function importConfig(event) {
       const data = JSON.parse(e.target.result);
       if (data.pairs && Array.isArray(data.pairs)) {
         pairs = data.pairs.map(ensurePair);
-        nextId = Math.max(...pairs.map(p => p.id), 0) + 1;
+        const ids = pairs.map(p => p.id).filter(n => typeof n === 'number' && isFinite(n));
+        nextId = (ids.length ? Math.max.apply(null, ids) : 0) + 1;
         render();
         notify('インポート完了: ' + pairs.length + 'ペア読み込み', 'success');
       } else {
@@ -1770,19 +1772,21 @@ async function loadScheduleCheck() {
         const comment = entry.match(/# rsyncgui-managed id=(\d+)/);
         const pairId = comment ? comment[1] : '?';
         const pair = pairs.find(p => p.id === parseInt(pairId));
-        const label = pair ? (shorten(pair.source) + ' → ' + shorten(pair.target)) : '(ペア#' + pairId + ')';
+        const rawLabel = pair ? (shorten(pair.source) + ' → ' + shorten(pair.target)) : '(ペア#' + pairId + ')';
+        const label = escHtml(rawLabel);
 
         html += '<div style="padding:6px 10px;border-radius:4px;margin-bottom:4px;background:var(--surface)">';
-        html += '<span style="color:var(--accent)">' + cronTime + '</span> ';
+        html += '<span style="color:var(--accent)">' + escHtml(cronTime) + '</span> ';
         html += '<span style="color:var(--text)">' + label + '</span>';
         html += '</div>';
       }
       for (const iv of intervals) {
         const pair = pairs.find(p => p.id === iv.id);
-        const label = pair ? (shorten(pair.source) + ' → ' + shorten(pair.target)) : '(ペア#' + iv.id + ')';
+        const rawLabel = pair ? (shorten(pair.source) + ' → ' + shorten(pair.target)) : '(ペア#' + iv.id + ')';
+        const label = escHtml(rawLabel);
 
         html += '<div style="padding:6px 10px;border-radius:4px;margin-bottom:4px;background:var(--surface)">';
-        html += '<span style="color:var(--orange)">' + iv.intervalLabel + '</span> ';
+        html += '<span style="color:var(--orange)">' + escHtml(iv.intervalLabel) + '</span> ';
         html += '<span style="color:var(--text)">' + label + '</span>';
         html += '</div>';
       }
@@ -1812,7 +1816,7 @@ async function loadScheduleCheck() {
 }
 
 function escHtml(s) {
-  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function dismissError(id) {
@@ -1832,7 +1836,8 @@ async function loadConfig() {
     const cfg = await res.json();
     if (cfg.pairs && cfg.pairs.length) {
       pairs = cfg.pairs.map(ensurePair);
-      nextId = Math.max(...pairs.map(p => p.id), 0) + 1;
+      const ids = pairs.map(p => p.id).filter(n => typeof n === 'number' && isFinite(n));
+      nextId = (ids.length ? Math.max.apply(null, ids) : 0) + 1;
     } else {
       addPair();
     }
@@ -1875,7 +1880,7 @@ async function cancelAll() {
         }
       }
       render();
-      notify((data.stopped || 0) + '件のタスクを中断しました', 'error');
+      notify((data.stopped || 0) + '件のタスクを中断しました', 'success');
     }
   } catch (e) {
     notify('全停止リクエストに失敗しました（サーバーが起動しているか確認してください）: ' + e.message, 'error');
@@ -1902,17 +1907,17 @@ async function waitForServer(maxMs = 60000) {
 
 async function adminUpdate() {
   if (!confirm('GitHubから最新版を取得してアップデートしますか？\n完了後、サービスは自動で再起動されます。')) return;
-  const b = document.getElementById('btn-update') || event.target;
-  b.disabled = true;
+  const b = document.getElementById('btn-update') || document.activeElement;
+  if (b) b.disabled = true;
   try {
     const res = await fetch('/api/admin/update', { method: 'POST' });
     const d = await res.json();
     if (!res.ok || !d.ok) { notify('アップデートに失敗しました: ' + (d.error || ''), 'error'); b.disabled = false; return; }
-    if (!d.updated) { notify('すでに最新版です', 'success'); b.disabled = false; return; }
-    b.textContent = '再起動中…';
+    if (!d.updated) { notify('すでに最新版です', 'success'); if (b) b.disabled = false; return; }
+    if (b) b.textContent = '再起動中…';
   } catch (e) {
     notify('アップデートに失敗しました: ' + e.message, 'error');
-    b.disabled = false;
+    if (b) b.disabled = false;
     return;
   }
   await waitForServer(120000);
@@ -1921,8 +1926,8 @@ async function adminUpdate() {
 
 async function adminRestart() {
   if (!confirm('rsyncGUIサービスを再起動しますか？\n実行中のタスクはすべて中断されます。')) return;
-  const b = document.getElementById('btn-restart') || event.target;
-  b.disabled = true;
+  const b = document.getElementById('btn-restart') || document.activeElement;
+  if (b) b.disabled = true;
   try { await fetch('/api/admin/restart', { method: 'POST' }); } catch (e) {}
   await waitForServer();
   location.reload();

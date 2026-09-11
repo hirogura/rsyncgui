@@ -22,7 +22,7 @@ INTERVAL_FILE = os.path.join(BASE_DIR, "intervals.json")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 LOG_RETENTION_DAYS = 30
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 SERVICE_NAME = os.environ.get("RSYNCGUI_SERVICE", "rsyncgui")
 GITHUB_RAW = "https://raw.githubusercontent.com/hirogura/rsyncgui/main/"
 UPDATE_FILES = ["server.py", "public/index.html"]
@@ -42,48 +42,6 @@ interval_processes = {}
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 
-def save_log(pair_id, entry):
-    log_file = os.path.join(LOGS_DIR, f"pair_{pair_id}.json")
-    logs = []
-    if os.path.exists(log_file):
-        try:
-            with open(log_file, "r") as f:
-                logs = json.load(f)
-        except Exception:
-            logs = []
-    logs.append(entry)
-    cutoff = time.time() - LOG_RETENTION_DAYS * 86400
-    logs = [l for l in logs if l.get("timestamp", 0) > cutoff]
-    with open(log_file, "w") as f:
-        json.dump(logs, f, ensure_ascii=False)
-
-
-def get_logs(pair_id):
-    log_file = os.path.join(LOGS_DIR, f"pair_{pair_id}.json")
-    if not os.path.exists(log_file):
-        return []
-    try:
-        with open(log_file, "r") as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-
-def cleanup_old_logs():
-    cutoff = time.time() - LOG_RETENTION_DAYS * 86400
-    for fname in os.listdir(LOGS_DIR):
-        if not fname.endswith(".json"):
-            continue
-        fpath = os.path.join(LOGS_DIR, fname)
-        try:
-            with open(fpath, "r") as f:
-                logs = json.load(f)
-            logs = [l for l in logs if l.get("timestamp", 0) > cutoff]
-            with open(fpath, "w") as f:
-                json.dump(logs, f, ensure_ascii=False)
-        except Exception:
-            pass
-
 PROGRESS2_RE = re.compile(
     r"^\s*([\d,]+)\s+(\d{1,3})%\s+([\d.]+\S*B/s)\s+(\S+)"
 )
@@ -97,13 +55,14 @@ def load_config():
 
 
 def save_config(cfg):
-    with open(CONFIG_FILE, "w") as f:
+    tmp_path = CONFIG_FILE + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, CONFIG_FILE)
 
 
 def build_rsync_cmd(job):
     args = []
-    _mode = job.get("mode", "sync")
 
     options = job.get("options", {})
     for key, val in options.items():
@@ -114,6 +73,11 @@ def build_rsync_cmd(job):
             args.append(f"--{key}")
         elif val is not False and val != "" and val is not None:
             args.append(f"--{key}={val}")
+
+    # フロントは backup-dir をトップレベルで送る場合があるため両対応
+    top_backup = job.get("backup-dir", job.get("backup_dir", ""))
+    if top_backup and str(top_backup).strip() and "backup-dir" not in options:
+        args.append(f"--backup-dir={top_backup}")
 
     if job.get("dryRun") or job.get("dry_run"):
         args.append("--dry-run")
@@ -169,17 +133,19 @@ def set_crontab(content):
     return proc.returncode == 0
 
 
-def schedule_to_cron_time(schedule):
-    times = schedule.get("times") or [schedule.get("time", "02:00")]
-    days = schedule.get("days", [])
-    if not days:
-        return None
-    day_str = ",".join(str(d) for d in days)
-    results = []
-    for t in times:
-        hour, minute = t.split(":")
-        results.append(f"{minute} {hour} * * {day_str}")
-    return results
+def _parse_time_str(time_str):
+    """'HH:MM' を (hour, minute) に正規化。無効なら None。"""
+    try:
+        parts = str(time_str).strip().split(":")
+        if len(parts) != 2:
+            return None
+        hour = int(parts[0])
+        minute = int(parts[1])
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 def pair_to_cron_cmd(pair):
@@ -188,17 +154,19 @@ def pair_to_cron_cmd(pair):
         "target": pair.get("target", ""),
         "mode": pair.get("mode", "sync"),
         "options": pair.get("options", {}),
+        "backup-dir": pair.get("backup-dir", pair.get("backup_dir", "")),
         "ssh": pair.get("ssh") if pair.get("sshEnabled") else None,
         "exclude": pair.get("exclude", ""),
         "dryRun": pair.get("dryRun", False),
     }
     args, use_sshpass, password = build_rsync_cmd(job)
     pair_id = pair.get("id", "?")
+    safe_pair_id = shlex.quote(str(pair_id))
     cmd_parts = ["rsync"]
     i = 0
     while i < len(args):
         if args[i] == "-e" and i + 1 < len(args):
-            cmd_parts.append(f"-e '{args[i+1]}'")
+            cmd_parts.append(f"-e {shlex.quote(args[i+1])}")
             i += 2
         else:
             cmd_parts.append(shlex.quote(args[i]) if ' ' in args[i] else args[i])
@@ -206,7 +174,7 @@ def pair_to_cron_cmd(pair):
     rsync_cmd = " ".join(cmd_parts)
     if use_sshpass:
         rsync_cmd = f"sshpass -f /tmp/rsyncgui_cron_pw_{pair_id} {rsync_cmd}"
-    return f"/opt/rsyncgui/cron_runner.sh {pair_id} {rsync_cmd}"
+    return f"/opt/rsyncgui/cron_runner.sh {safe_pair_id} {rsync_cmd}"
 
 
 def sync_crontab(pairs):
@@ -225,6 +193,10 @@ def sync_crontab(pairs):
             time_str = sched.get("time", "02:00")
             times = [time_str]
         days = sched.get("days", [])
+        try:
+            days = [int(d) for d in days if 0 <= int(d) <= 6]
+        except (ValueError, TypeError):
+            continue
         if not days:
             continue
         ssh_cfg = pair.get("ssh") if pair.get("sshEnabled") else None
@@ -239,7 +211,10 @@ def sync_crontab(pairs):
         day_str = ",".join(str(d) for d in days)
         cmd = pair_to_cron_cmd(pair)
         for time_str in times:
-            hour, minute = time_str.split(":")
+            parsed = _parse_time_str(time_str)
+            if not parsed:
+                continue
+            hour, minute = parsed
             cron_time = f"{minute} {hour} * * {day_str}"
             cron_line = f"{cron_time} {cmd} {CRON_TAG} id={pair.get('id', '?')}"
             lines.append(cron_line)
@@ -256,8 +231,18 @@ def load_intervals():
 
 
 def save_intervals(intervals):
-    with open(INTERVAL_FILE, "w") as f:
+    tmp_path = INTERVAL_FILE + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(intervals, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, INTERVAL_FILE)
+
+
+def _log_ts(entry):
+    ts = entry.get("timestamp", entry.get("ts", 0))
+    try:
+        return float(ts)
+    except (TypeError, ValueError):
+        return 0
 
 
 def load_pair_logs(pair_id):
@@ -267,8 +252,8 @@ def load_pair_logs(pair_id):
     try:
         with open(log_file, "r") as f:
             logs = json.load(f)
-        cutoff = time.time() - 30 * 24 * 3600
-        logs = [l for l in logs if l.get("timestamp", l.get("ts", 0)) > cutoff]
+        cutoff = time.time() - LOG_RETENTION_DAYS * 86400
+        logs = [l for l in logs if _log_ts(l) > cutoff]
         return logs
     except Exception:
         return []
@@ -276,19 +261,34 @@ def load_pair_logs(pair_id):
 
 def save_pair_log(pair_id, entry):
     os.makedirs(LOGS_DIR, exist_ok=True)
+    if "timestamp" not in entry and "ts" in entry:
+        entry = {**entry, "timestamp": entry["ts"]}
+    if "timestamp" not in entry:
+        entry = {**entry, "timestamp": time.time()}
     log_file = os.path.join(LOGS_DIR, f"pair_{pair_id}.json")
     logs = load_pair_logs(pair_id)
     logs.append(entry)
-    cutoff = time.time() - 30 * 24 * 3600
-    logs = [l for l in logs if l.get("timestamp", l.get("ts", 0)) > cutoff]
-    with open(log_file, "w") as f:
+    cutoff = time.time() - LOG_RETENTION_DAYS * 86400
+    logs = [l for l in logs if _log_ts(l) > cutoff]
+    tmp_path = log_file + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(logs, f, ensure_ascii=False)
+    os.replace(tmp_path, log_file)
+
+
+# 後方互換エイリアス（旧名で呼ぶ箇所用）
+def get_logs(pair_id):
+    return load_pair_logs(pair_id)
+
+
+def save_log(pair_id, entry):
+    return save_pair_log(pair_id, entry)
 
 
 def cleanup_old_logs():
     if not os.path.exists(LOGS_DIR):
         return
-    cutoff = time.time() - 30 * 24 * 3600
+    cutoff = time.time() - LOG_RETENTION_DAYS * 86400
     for fname in os.listdir(LOGS_DIR):
         if not fname.endswith(".json"):
             continue
@@ -296,10 +296,12 @@ def cleanup_old_logs():
         try:
             with open(fpath, "r") as f:
                 logs = json.load(f)
-            filtered = [l for l in logs if l.get("timestamp", l.get("ts", 0)) > cutoff]
+            filtered = [l for l in logs if _log_ts(l) > cutoff]
             if len(filtered) < len(logs):
-                with open(fpath, "w") as f:
+                tmp_path = fpath + ".tmp"
+                with open(tmp_path, "w") as f:
                     json.dump(filtered, f, ensure_ascii=False)
+                os.replace(tmp_path, fpath)
         except Exception:
             pass
 
@@ -367,37 +369,74 @@ def make_job_entry(proc):
 
 
 def stream_output(job_id, proc):
-    for raw_line in proc.stdout:
-        for line in raw_line.replace("\r", "\n").split("\n"):
-            if not line:
-                continue
-            progress = parse_progress_line(line)
-            if progress:
-                processes[job_id]["progress"] = progress
-            else:
-                processes[job_id]["log"].append({"type": "stdout", "text": line})
-    for line in proc.stderr:
-        processes[job_id]["log"].append({"type": "stderr", "text": line})
+    entry = processes.get(job_id)
+    if entry is None:
+        return
+    try:
+        for raw_line in proc.stdout:
+            if processes.get(job_id) is None:
+                break
+            for line in raw_line.replace("\r", "\n").split("\n"):
+                if not line:
+                    continue
+                progress = parse_progress_line(line)
+                if progress:
+                    processes[job_id]["progress"] = progress
+                else:
+                    processes[job_id]["log"].append({"type": "stdout", "text": line})
+        for line in proc.stderr:
+            if processes.get(job_id) is None:
+                break
+            processes[job_id]["log"].append({"type": "stderr", "text": line})
+    except Exception as e:
+        if processes.get(job_id) is not None:
+            processes[job_id]["log"].append({"type": "error", "text": str(e)})
+
+
+def _stop_interval_thread(pair_id):
+    entry = interval_processes.get(pair_id)
+    if entry:
+        sf = entry.get("stop_flag")
+        if isinstance(sf, dict):
+            sf["stop"] = True
 
 
 def start_interval_scheduler(pairs):
+    active_ids = set()
+    for pair in pairs:
+        sched = pair.get("schedule", {}) if isinstance(pair.get("schedule", {}), dict) else {}
+        if sched.get("enabled") and sched.get("mode") == "interval":
+            active_ids.add(pair.get("id"))
     for pair_id in list(interval_processes.keys()):
-        if not any(p.get("id") == pair_id for p in pairs):
-            interval_processes[pair_id]["stop"] = True
+        if pair_id not in active_ids:
+            _stop_interval_thread(pair_id)
+            del interval_processes[pair_id]
 
     for pair in pairs:
-        sched = pair.get("schedule", {})
+        sched = pair.get("schedule", {}) if isinstance(pair.get("schedule", {}), dict) else {}
         if not sched.get("enabled") or sched.get("mode") != "interval":
             continue
         pair_id = pair.get("id")
+        try:
+            interval_val = int(sched.get("interval", 60))
+        except (ValueError, TypeError):
+            interval_val = 60
+        interval_val = max(1, interval_val)
+        unit = sched.get("intervalUnit", "s")
+        if unit not in ("s", "m", "h"):
+            unit = "s"
         if pair_id in interval_processes:
             existing = interval_processes[pair_id]
-            if existing.get("interval") == sched.get("interval") and existing.get("unit") == sched.get("intervalUnit"):
+            if existing.get("interval") == interval_val and existing.get("unit") == unit:
                 continue
-            existing["stop"] = True
-        interval_seconds = sched.get("interval", 60) * {"s": 1, "m": 60, "h": 3600}.get(sched.get("intervalUnit", "s"), 1)
+            _stop_interval_thread(pair_id)
+            del interval_processes[pair_id]
+        interval_seconds = interval_val * {"s": 1, "m": 60, "h": 3600}[unit]
+        interval_seconds = max(1, interval_seconds)
         stop_flag = {"stop": False}
-        interval_processes[pair_id] = {"interval": sched.get("interval"), "unit": sched.get("intervalUnit"), "stop": False, "thread": None}
+        pair_snapshot = json.loads(json.dumps(pair))
+        interval_processes[pair_id] = {"interval": interval_val, "unit": unit,
+                                       "stop_flag": stop_flag, "thread": None}
 
         def run_interval(pid, secs, pair_data, sf):
             while not sf["stop"]:
@@ -409,6 +448,7 @@ def start_interval_scheduler(pairs):
                     "target": pair_data.get("target", ""),
                     "mode": pair_data.get("mode", "sync"),
                     "options": pair_data.get("options", {}),
+                    "backup-dir": pair_data.get("backup-dir", pair_data.get("backup_dir", "")),
                     "ssh": pair_data.get("ssh") if pair_data.get("sshEnabled") else None,
                     "exclude": pair_data.get("exclude", ""),
                     "dryRun": pair_data.get("dryRun", False),
@@ -438,16 +478,20 @@ def start_interval_scheduler(pairs):
                     processes[job_id]["done"] = True
                     processes[job_id]["exitCode"] = proc.returncode
                     save_pair_log(pid, {
-                        "ts": time.time(),
+                        "timestamp": time.time(),
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "status": "done" if proc.returncode == 0 else "error",
                         "command": " ".join(cmd_list),
                         "exitCode": proc.returncode,
+                        "log": "",
                     })
                     print(f"[rsyncgui] interval done: pid={pid} exit={proc.returncode}", flush=True)
                 except Exception as e:
-                    processes[job_id]["log"].append({"type": "error", "text": str(e)})
-                    processes[job_id]["done"] = True
-                    processes[job_id]["exitCode"] = -1
+                    entry = processes.get(job_id)
+                    if entry is not None:
+                        entry["log"].append({"type": "error", "text": str(e)})
+                        entry["done"] = True
+                        entry["exitCode"] = -1
                     print(f"[rsyncgui] interval error: pid={pid} err={e}", flush=True)
                 finally:
                     if pw_file and os.path.exists(pw_file.name):
@@ -457,7 +501,7 @@ def start_interval_scheduler(pairs):
                         break
                     time.sleep(1)
 
-        t = threading.Thread(target=run_interval, args=(pair_id, interval_seconds, pair, stop_flag), daemon=True)
+        t = threading.Thread(target=run_interval, args=(pair_id, interval_seconds, pair_snapshot, stop_flag), daemon=True)
         t.start()
         interval_processes[pair_id]["thread"] = t
 
@@ -496,12 +540,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(filepath, "rb") as f:
                 data = f.read()
             self.send_response(200)
-            self.send_header("Content-Type", f"{mime}; charset=utf-8")
+            if ext in (".html", ".css", ".js", ".json", ".svg"):
+                self.send_header("Content-Type", f"{mime}; charset=utf-8")
+            else:
+                self.send_header("Content-Type", mime)
             self._cors()
             self.send_header("Content-Length", len(data))
             self.end_headers()
             self.wfile.write(data)
-        except FileNotFoundError:
+        except (FileNotFoundError, IsADirectoryError):
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not found")
+        except OSError:
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not found")
@@ -540,12 +591,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             if path == "/":
                 path = "/index.html"
-            filepath = os.path.join(PUBLIC, path.lstrip("/"))
+            # パストラバーサル対策: PUBLIC 配下のみ配信
+            rel = os.path.normpath(path.lstrip("/"))
+            filepath = os.path.join(PUBLIC, rel)
+            if os.path.commonpath([PUBLIC, os.path.abspath(filepath)]) != PUBLIC:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"Not found")
+                return
             self._file_response(filepath)
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            content_length = 0
         body = self.rfile.read(content_length)
 
         if parsed.path == "/api/rsync":
@@ -717,6 +778,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _run_rsync(self, body):
         try:
             job = json.loads(body)
+            if not job.get("source") or not job.get("target"):
+                self._json_response({"error": "source and target are required"}, 400)
+                return
             args, use_sshpass, password = build_rsync_cmd(job)
             job_id = f"job_{int(time.time() * 1000)}"
 
@@ -724,6 +788,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if use_sshpass:
                 cmd = f"sshpass -f /tmp/rsyncgui_pw_{job_id} rsync " + " ".join(args)
 
+            # ポーリング競合対策: レスポンス前にプレースホルダを登録
+            processes[job_id] = make_job_entry(None)
             self._json_response({"id": job_id, "command": cmd})
 
             def run():
@@ -745,7 +811,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         text=True,
                         preexec_fn=os.setsid,
                     )
-                    processes[job_id] = make_job_entry(proc)
+                    processes[job_id]["proc"] = proc
+                    if processes[job_id].get("cancelled"):
+                        try:
+                            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                        except (ProcessLookupError, PermissionError, OSError):
+                            pass
                     stream_output(job_id, proc)
                     proc.wait()
                     processes[job_id]["done"] = True
@@ -765,9 +836,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "log": "\n".join(log_texts),
                     })
                 except Exception as e:
-                    processes[job_id]["log"].append({"type": "error", "text": str(e)})
-                    processes[job_id]["done"] = True
-                    processes[job_id]["exitCode"] = -1
+                    if job_id in processes:
+                        processes[job_id]["log"].append({"type": "error", "text": str(e)})
+                        processes[job_id]["done"] = True
+                        processes[job_id]["exitCode"] = -1
                 finally:
                     if pw_file and os.path.exists(pw_file.name):
                         os.unlink(pw_file.name)
@@ -782,8 +854,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json_response({"error": "not found"}, 404)
             return
         proc = p.get("proc")
-        if not proc or p.get("done"):
+        if p.get("done"):
             self._json_response({"ok": False, "error": "already finished"})
+            return
+        if not proc:
+            # 起動直後（Popen前）の取り消し
+            p["cancelled"] = True
+            p["done"] = True
+            p["exitCode"] = -15
+            p["log"].append({"type": "error", "text": "（ユーザー操作により中断されました）"})
+            self._json_response({"ok": True})
             return
         try:
             p["cancelled"] = True
@@ -898,6 +978,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 new_paths[rel] = tmp_path
             for rel, tmp_path in new_paths.items():
                 os.replace(tmp_path, os.path.join(BASE_DIR, rel))
+            try:
+                os.chmod(os.path.join(BASE_DIR, "server.py"), 0o755)
+            except OSError:
+                pass
         except Exception as e:
             self._json_response({"ok": False, "error": str(e)}, 500)
             return
@@ -925,22 +1009,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def kill_orphaned_rsync():
-    """起動時にrsyncGUIが管理する以外の残留rsyncプロセスを掃除する"""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "rsync.*--info=progress2"],
-            capture_output=True, text=True, timeout=5
-        )
-        for line in result.stdout.strip().split("\n"):
-            pid = line.strip()
-            if pid:
-                try:
-                    os.kill(int(pid), signal.SIGTERM)
-                    print(f"[rsyncgui] killed orphaned rsync PID {pid}")
-                except (ProcessLookupError, PermissionError):
-                    pass
-    except Exception:
-        pass
+    """起動時の残留rsync掃除。cron実行中の正規ジョブを殺さないよう何もしない。
+    旧版では無条件に `rsync.*--info=progress2` を SIGTERM しており、
+    cron実行中ジョブや他ユーザーのrsyncまで殺す危険があったため無効化。"""
+    return
 
 
 def main():
@@ -964,7 +1036,9 @@ def main():
     def shutdown(sig, frame):
         print("\nShutting down...")
         for pid in list(interval_processes.keys()):
-            interval_processes[pid]["stop"] = True
+            sf = interval_processes[pid].get("stop_flag")
+            if isinstance(sf, dict):
+                sf["stop"] = True
         def force_exit():
             time.sleep(3)
             os._exit(0)
